@@ -32,32 +32,36 @@ in a working state. Estimates add up to ~8 h.
 
 ## Phase 1: Rules engine in `packages/game` (~2 h). Most important.
 
-- [ ] `types.ts`: `ROLES` tuple (chain order), `Role`, `RoleState`, `RoundRecord`,
+- [x] `types.ts`: `ROLES` tuple (chain order), `Role`, `RoleState`, `RoundRecord`,
       `GameState`, constants (`TOTAL_ROUNDS = 20`, `HOLDING_COST = 0.5`,
       `BACKLOG_COST = 1`, `customerDemand(round)`).
-- [ ] `rules.ts`
-  - [ ] `createGame(code)`: status `lobby`, round 0, every role at its starting state.
-  - [ ] `claimRole(state, role, token)`: reject if not in lobby or role taken; when
+- [x] `rules.ts`
+  - [x] `createGame(code)`: status `lobby`, round 0, every role at its starting state.
+  - [x] `claimRole(state, role, token)`: reject if not in lobby or role taken; when
         4/4, set `playing`, round 1, run steps 1–4.
-  - [ ] `runRoundSteps(state)`: steps 1–4 exactly as in PRD §3; append a `RoundRecord`
+  - [x] `runRoundSteps(state)`: steps 1–4 exactly as in PRD §3; append a `RoundRecord`
         per role (`orderPlaced` filled in later).
-  - [ ] `placeOrder(state, role, qty)`: validate (playing, integer ≥ 0, sensible max
+  - [x] `placeOrder(state, role, qty)`: validate (playing, integer ≥ 0, sensible max
         e.g. 10 000, not already submitted); set `pendingOrder`. If all four are set:
         write `orderPlaced` into the history, set `lastOrder`, clear pending; if
         round = 20 → `finished`, else round++ and `runRoundSteps`.
-  - [ ] Return type `{ ok: true, state } | { ok: false, error: string }`.
-- [ ] `view.ts`: `toPlayerView(state, role | null)`
+  - [x] Return type `{ ok: true, state } | { ok: false, error: RuleError }` (error codes +
+        `RULE_ERROR_MESSAGES`, so the server can map them to HTTP statuses).
+  - [x] `findRoleByToken(state, token)` for the server.
+- [x] `view.ts`: `toPlayerView(state, role | null)`
   - always: code, status, round, totalRounds, `rolesTaken: Record<Role, boolean>`,
     `submitted: Record<Role, boolean>`, `myRole`.
   - `me` (own role only, when playing/finished): latest record fields + last order +
-    total cost + `hasSubmitted`.
+    total cost + `pendingOrder` (own submitted amount, null until ordered).
   - `results` (only when `finished`): cost per role + total.
   - never tokens, never other roles' state.
-- [ ] `protocol.ts`: zod schemas + inferred types
+- [x] `protocol.ts`: zod schemas + inferred types
   - `ClientMessage`: `hello { code, token? }` | `placeOrder { quantity }`
   - `ServerMessage`: `state { view }` | `error { message }`
+  - `PlayerViewSchema`: the view type is inferred from it, so the client can validate
+    what it receives.
   - `CreateGameResponse`, `JoinRequest { role }`, `JoinResponse { token, role }`
-- [ ] `index.ts` barrel.
+- [x] `index.ts` barrel.
 
 ## Phase 2: Rules tests (~1 h)
 
@@ -95,8 +99,8 @@ fills the lobby and plays N rounds.
       resolves the token to a role (an unknown token means a spectator) and sends
       the current view; `placeOrder` requires a bound role; errors are sent only to
       that socket.
-- [ ] `index.ts`: Fastify app, register routes + ws; in production also serve
-      `apps/web/dist` with an SPA fallback to `index.html`; `PORT` env (default 3000).
+- [ ] `index.ts`: Fastify app, register routes + ws. (Done early: in production it serves
+      `apps/web/dist` with an SPA fallback to `index.html`; `PORT` env (default 3000).)
 - [ ] Scripts: `dev`: `tsx watch src/index.ts`; `build`: `tsup` (bundle `@beer/game`,
       keep `better-sqlite3` external); `start`: `node dist/index.js`.
 - [ ] Manual check with a WS client: restart the server mid-game and confirm the
