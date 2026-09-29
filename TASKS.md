@@ -65,23 +65,28 @@ in a working state. Estimates add up to ~8 h.
 
 ## Phase 2: Rules tests (~1 h)
 
-`packages/game/src/rules.test.ts` (Vitest), plus a helper `playGame(ordersFn)` that
-fills the lobby and plays N rounds.
+`packages/game/src/rules.test.ts` and `view.test.ts` (Vitest), with helpers in
+`test-helpers.ts` (`startGame()`, `play(state, orderFn, untilRound?)`, `unwrap`).
 
-- [ ] Fixture replay: load `fixtures/everyone-orders-four.json`; for every round
+- [x] Fixture replay: load `fixtures/everyone-orders-four.json`; for every round
       and role compare the history record; final costs 394/120/120/120, total 754.
-- [ ] EXAMPLE.md delay check: Retailer orders 8 from round 5 → Wholesaler's
+- [x] EXAMPLE.md delay check: Retailer orders 8 from round 5 → Wholesaler's
       incoming order is 8 first in round 6; Retailer's shipment is 8 first in round 8.
-- [ ] Round does not advance with 3/4 submissions; second submission from the same
+- [x] Round does not advance with 3/4 submissions; second submission from the same
       role is rejected.
-- [ ] Invalid quantities are rejected (−1, 2.5, NaN), and so are orders in the
+- [x] Invalid quantities are rejected (−1, 2.5, NaN), and so are orders in the
       lobby or after the game has finished.
-- [ ] Finishes exactly after round 20's orders.
-- [ ] Backlog is served before new orders once stock arrives (small hand case).
-- [ ] `toPlayerView` while playing: serialised JSON contains no token and no other
+- [x] Finishes exactly after round 20's orders.
+- [x] Backlog is served before new orders once stock arrives (small hand case).
+- [x] `toPlayerView` while playing: serialised JSON contains no token and no other
       role's inventory/backlog/cost; `results` appears only when finished.
-- [ ] `claimRole`: taken role rejected; game starts at 4/4 with round 1 applied.
-- [ ] Root `npm test` runs these.
+- [x] `claimRole`: taken role rejected; game starts at 4/4 with round 1 applied.
+- [x] Extra: the supplier delivers the Factory's order with the same delays; downstream
+      receives what was shipped, not what was ordered; rule functions never change
+      their input.
+- [x] Checked that the tests catch deliberate bugs (off-by-one demand, shipping the
+      owed amount, supplier ignoring the order, free backlog).
+- [x] Root `npm test` runs these (22 tests).
 
 ## Phase 3: Server (~1.5 h)
 
