@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { CircleCheck, Clock, LoaderCircle } from 'lucide-react';
+import { Bot, CircleCheck, Clock, LoaderCircle } from 'lucide-react';
 import { MAX_ORDER, OrderQuantitySchema, ROLES, type PlayerView } from '@beer/game';
 import { formatNumber } from '../lib/format';
 import { ROLE_INFO } from '../lib/roles';
@@ -172,6 +172,7 @@ function SubmissionStatus({ view }: { view: PlayerView }) {
               <Clock className="size-5 text-slate-400" aria-label="waiting" />
             )}
             <span className={view.myRole === role ? 'font-semibold' : ''}>{ROLE_INFO[role].label}</span>
+            {view.bots[role] ? <Bot className="size-4 text-slate-400" aria-label="bot" /> : null}
           </li>
         ))}
       </ul>

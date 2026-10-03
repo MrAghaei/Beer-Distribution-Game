@@ -18,7 +18,7 @@ Requires **Node 24** (see `.nvmrc`) and **npm** (npm workspaces + Turborepo).
 ```sh
 npm install     # one-time setup
 npm run dev     # server on :3000 + Vite on :5173 → open http://localhost:5173
-npm test        # rules tests (Vitest, packages/game)
+npm test        # rules tests (packages/game) + server integration tests (Vitest)
 npm run build   # builds apps/web/dist and apps/server/dist
 npm start       # serves the built app and API on one port → http://localhost:3000
 ```
@@ -27,7 +27,8 @@ npm start       # serves the built app and API on one port → http://localhost:
 
 To play alone: open the app, click **Create game**, copy the link into three
 more tabs of the same browser and take a different role in each. The game starts
-when the fourth role is taken.
+when the fourth role is taken. Or take one role and click **Fill 3 roles with
+bots** to start right away against bots.
 
 | Variable   | Default             | Meaning |
 |------------|---------------------|---------|
@@ -43,6 +44,8 @@ Deleting that file resets every game.
                  │ packages/game  (@beer/game, pure TS, no I/O)           │
                  │   types.ts     GameState, RoleState, constants         │
                  │   rules.ts     createGame / claimRole / placeOrder     │
+                 │                fillWithBots                            │
+                 │   bot.ts       botOrder(record): the bots' policy      │
                  │   view.ts      toPlayerView(state, role)               │
                  │   protocol.ts  zod schemas for HTTP + WS messages      │
                  └──────────────▲───────────────────────────▲─────────────┘
@@ -50,8 +53,9 @@ Deleting that file resets every game.
 ┌───────────────────────────────┴──────┐    ┌───────────────┴──────────────────────────┐
 │ apps/web  (React, Vite, Tailwind v4) │    │ apps/server  (Fastify, better-sqlite3)   │
 │   routes/Home, routes/Game           │    │   routes.ts       POST /api/games, /join │
-│   components/Lobby, Board, Results   │◄──►│   ws.ts           /ws: hello, placeOrder │
-│   hooks/useGameSocket                │ WS │   gameService.ts  cache → rule → save    │
+│   components/Lobby, Board, Results,  │◄──►│   ws.ts           /ws: hello, placeOrder,│
+│     HistoryChart                     │ WS │                   fillWithBots           │
+│   hooks/useGameSocket                │    │   gameService.ts  cache → rule → save    │
 │   lib/api (TanStack Query mutations) │HTTP│   hub.ts          per-player broadcast   │
 │   lib/session (token per tab)        │    │   db.ts           games(code, state JSON)│
 └──────────────────────────────────────┘    └──────────────────────────────────────────┘
@@ -87,8 +91,9 @@ whatever snapshot they receive last.
    SQLite, updates the cache and asks the hub to broadcast.
 4. **Per-player snapshot.** The hub sends each socket
    `toPlayerView(state, itsRole)`: a full snapshot of what that player may see
-   (own numbers, who has taken a role, who has ordered, and the results once
-   finished). Other roles' numbers and all tokens never leave the server, so
+   (own numbers, who has taken a role, who has ordered, and once finished the
+   costs and every role's round-by-round history for the results chart). Other
+   roles' numbers and all tokens never leave the server while the game runs, so
    information hiding doesn't depend on the UI. Errors go only to the socket that
    caused them.
 
@@ -108,6 +113,14 @@ that disappeared without a close frame. When a tab joins a role, it re-sends
 form stays locked from sending until the server's snapshot shows the order, so
 a double click or a slow connection can't place two orders.
 
+**Bots** are one more intent on the same path: `fillWithBots` over the socket
+(only accepted from a socket bound to a role, so a spectator can't start someone's
+game) runs the pure `fillWithBots` rule, which seats a bot in every free role and
+starts the game. Bots live in the rules, not in a server loop: whenever a round
+starts, each bot's order is set straight away from its own numbers. Nothing is
+scheduled, a restart can't lose a bot's turn, and the round still advances on
+the last person's order.
+
 ## How game state is modelled
 
 A whole game is one plain JSON object (`GameState` in
@@ -119,7 +132,7 @@ type GameState = {
   code: string;
   status: 'lobby' | 'playing' | 'finished';
   round: number;                                   // 0 in the lobby, then 1..20
-  players: Partial<Record<Role, { token: string }>>;
+  players: Partial<Record<Role, { token: string } | { bot: true }>>;
   roles: Record<Role, RoleState>;
 };
 
@@ -170,10 +183,16 @@ Where the brief left room, I chose:
   bound only exists to reject absurd input.
 - **Late joiners** see the lobby or the game as spectators (who has ordered, but no
   numbers) and can't claim a role once the game has started.
+- **Bot policy.** A bot orders `incomingOrder + (backlog − inventory) / 2`, rounded
+  and clamped to 0–10 000: replace what was just ordered, and close half the gap
+  between backlog and stock. It ignores what is already in transit, so it
+  over-orders after a shortage, which reproduces the bullwhip effect nicely.
+  It also orders 0 in round 1, because every role starts with 12 in stock.
+  A game needs at least one person; four bots would never let a round end.
 
 ## Tests
 
-`npm test` runs 22 Vitest tests in `packages/game` (no React, HTTP, sockets or DB):
+`npm test` runs 29 Vitest tests in `packages/game` (no React, HTTP, sockets or DB):
 
 - **Fixture replay:** all four roles, all 20 rounds, every field of every record,
   final costs 394 / 120 / 120 / 120 = 754.
@@ -185,14 +204,27 @@ Where the brief left room, I chose:
 - The supplier and downstream shipments follow the same delays; rule functions
   never mutate their input.
 - `toPlayerView`: no tokens and no other role's numbers in the serialised view
-  while playing; results only when finished.
+  while playing; results and history only when finished; bot seats are marked.
 - Claiming a taken role fails; the fourth claim starts round 1.
+- Bots: the ordering policy (including the clamps), `fillWithBots` needs a person
+  and the lobby, and one person plays a whole game with bots that order by their
+  policy every round.
 
-I checked that the tests catch deliberate bugs (off-by-one demand, shipping
+It also runs 3 integration tests in `apps/server` that start the real app on a free port
+(`:memory:` SQLite) and talk to it with `fetch` and Node's built-in `WebSocket`:
+
+- Four players join over HTTP, say hello and play all 20 rounds over WebSockets.
+  The round waits for the fourth order, a double submit errors only on its own
+  socket, and everyone ends on 394 / 120 / 120 / 120 = 754.
+- A spectator can't fill the game with bots; a seated player can, then plays
+  alone to the end and the spectator sees the full history.
+- A game and its seats survive a restart on the same database file: the player's
+  token still binds to its role, and the order it already placed is still there.
+
+I checked that the rules tests catch deliberate bugs (off-by-one demand, shipping
 what is owed instead of what is available, a supplier that ignores the order,
-free backlog). The server and client were checked by hand and with a script that
-plays a full game over real WebSockets, including restarting the server mid-game.
-See [`TASKS.md`](TASKS.md) for the exact checks.
+free backlog). The client was checked by hand in the browser, including reloads
+and a server restart mid-game. See [`TASKS.md`](TASKS.md) for the exact checks.
 
 ## Tradeoffs
 
@@ -218,12 +250,9 @@ See [`TASKS.md`](TASKS.md) for the exact checks.
 
 ## What I'd do next
 
-- A server integration test: real Fastify on `:memory:`, four WS clients, join →
-  hello → order → round advances, plus a restart. (Done as a script so far, not in
-  `npm test`.)
 - A browser end-to-end test (Playwright) with four tabs.
-- The optional extras: a chart of inventory, backlog and orders from `history` on
-  the results screen, and bots that fill empty roles.
+- Bots that look at their pipeline (what's in transit) and a choice of policies;
+  letting a bot take over a player who left mid-game.
 - Game expiry and cache eviction, and rate limiting on game creation.
 - Let a player leave or be replaced in the lobby.
 

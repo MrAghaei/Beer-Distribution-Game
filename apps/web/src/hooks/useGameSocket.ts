@@ -13,6 +13,8 @@ export type GameSocket = {
   /** True between sending an order and the server's answer. */
   sendingOrder: boolean;
   placeOrder: (quantity: number) => void;
+  /** Asks the server to seat bots in the free roles. Returns false if the socket is not open. */
+  fillWithBots: () => boolean;
 };
 
 /**
@@ -104,7 +106,16 @@ export function useGameSocket(code: string, token: string | null): GameSocket {
     setSendingOrder(true);
   }, []);
 
-  return { view, connected, lastError, sendingOrder, placeOrder };
+  const fillWithBots = useCallback(() => {
+    if (!send(socketRef.current, { type: 'fillWithBots' })) {
+      setLastError('Not connected. Try again in a moment.');
+      return false;
+    }
+    setLastError(null);
+    return true;
+  }, []);
+
+  return { view, connected, lastError, sendingOrder, placeOrder, fillWithBots };
 }
 
 function socketUrl(): string {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PlayerViewSchema } from './protocol';
-import { placeOrder } from './rules';
+import { claimRole, createGame, fillWithBots, placeOrder } from './rules';
 import { play, startGame, unwrap } from './test-helpers';
 import { ROLES } from './types';
 import { toPlayerView } from './view';
@@ -23,6 +23,7 @@ describe('toPlayerView', () => {
       expect(json).not.toContain(secret);
     }
     expect(view.submitted).toEqual({ retailer: false, wholesaler: true, distributor: false, factory: false });
+    expect(view.bots).toEqual({ retailer: false, wholesaler: false, distributor: false, factory: false });
     expect(view.results).toBeNull();
   });
 
@@ -32,15 +33,25 @@ describe('toPlayerView', () => {
     expect(view.rolesTaken).toEqual({ retailer: true, wholesaler: true, distributor: true, factory: true });
   });
 
-  it('reveals every role’s cost and the total once the game is finished', () => {
+  it('reveals every role’s cost, the total and the full history once the game is finished', () => {
     const state = play(startGame(), () => 4);
     const view = toPlayerView(state, 'factory');
 
     expect(view.status).toBe('finished');
-    expect(view.results).toEqual({
+    expect(view.results).toMatchObject({
       costs: { retailer: 394, wholesaler: 120, distributor: 120, factory: 120 },
       total: 754,
     });
+    for (const role of ROLES) expect(view.results?.history[role]).toEqual(state.roles[role].history);
     expect(ROLES.every((role) => !view.submitted[role])).toBe(true);
+  });
+
+  it('marks bot-held roles and never shows a token', () => {
+    const lobby = unwrap(claimRole(createGame('ABC123'), 'distributor', 'token-distributor'));
+    const view = toPlayerView(unwrap(fillWithBots(lobby)), 'distributor');
+
+    expect(view.bots).toEqual({ retailer: true, wholesaler: true, distributor: false, factory: true });
+    expect(view.submitted).toEqual({ retailer: true, wholesaler: true, distributor: false, factory: true });
+    expect(JSON.stringify(view)).not.toContain('token');
   });
 });

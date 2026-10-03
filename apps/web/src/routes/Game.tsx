@@ -28,7 +28,7 @@ export function GamePage() {
 
 function GameScreen({ code }: { code: string }) {
   const [token, setToken] = useState(() => getToken(code));
-  const { view, connected, lastError, sendingOrder, placeOrder } = useGameSocket(code, token);
+  const { view, connected, lastError, sendingOrder, placeOrder, fillWithBots } = useGameSocket(code, token);
 
   function handleJoined(newToken: string) {
     saveToken(code, newToken);
@@ -51,7 +51,13 @@ function GameScreen({ code }: { code: string }) {
     <div className="space-y-6">
       {connected ? null : <ConnectionBanner />}
       {view.status === 'lobby' ? (
-        <Lobby view={view} onJoined={handleJoined} />
+        <Lobby
+          view={view}
+          lastError={lastError}
+          canFillWithBots={connected}
+          onJoined={handleJoined}
+          onFillWithBots={fillWithBots}
+        />
       ) : view.status === 'playing' ? (
         <Board view={view} lastError={lastError} sendingOrder={sendingOrder} canOrder={connected} onOrder={placeOrder} />
       ) : (

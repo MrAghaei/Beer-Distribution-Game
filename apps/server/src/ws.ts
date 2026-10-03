@@ -54,6 +54,13 @@ export const wsRoutes: FastifyPluginAsync<{ games: GameService; hub: Hub }> = as
       if (!result.ok) fail(SERVICE_ERROR_MESSAGES[result.error]);
     };
 
+    const fillWithBots = () => {
+      if (!session?.token) return fail(SERVICE_ERROR_MESSAGES.unknown_player);
+
+      const result = games.fillWithBots(session.code, session.token);
+      if (!result.ok) fail(SERVICE_ERROR_MESSAGES[result.error]);
+    };
+
     socket.on('message', (raw) => {
       const parsed = parseMessage(raw);
       if (!parsed.ok) return fail(parsed.error);
@@ -64,6 +71,8 @@ export const wsRoutes: FastifyPluginAsync<{ games: GameService; hub: Hub }> = as
             return hello(parsed.message);
           case 'placeOrder':
             return order(parsed.message);
+          case 'fillWithBots':
+            return fillWithBots();
         }
       } catch (err) {
         // A throw inside a socket listener would take the whole process down.

@@ -3,13 +3,14 @@ import { Trophy } from 'lucide-react';
 import { ROLES, type PlayerView } from '@beer/game';
 import { formatNumber } from '../lib/format';
 import { ROLE_INFO } from '../lib/roles';
+import { HistoryChart } from './HistoryChart';
 
 export function Results({ view }: { view: PlayerView }) {
   const { results } = view;
   if (!results) return null;
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <section className="text-center">
         <Trophy className="mx-auto size-10 text-amber-600" aria-hidden />
         <h1 className="mt-2 text-2xl font-bold">Game over</h1>
@@ -18,7 +19,7 @@ export function Results({ view }: { view: PlayerView }) {
         </p>
       </section>
 
-      <table className="w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <table className="mx-auto w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <thead className="bg-slate-100 text-left text-sm text-slate-600">
           <tr>
             <th className="px-4 py-2 font-medium">Role</th>
@@ -33,6 +34,7 @@ export function Results({ view }: { view: PlayerView }) {
                 <td className="px-4 py-2">
                   {ROLE_INFO[role].label}
                   {mine ? <span className="ml-2 text-sm font-normal text-amber-700">(you)</span> : null}
+                  {view.bots[role] ? <span className="ml-2 text-sm text-slate-500">(bot)</span> : null}
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums">{formatNumber(results.costs[role])}</td>
               </tr>
@@ -46,6 +48,8 @@ export function Results({ view }: { view: PlayerView }) {
           </tr>
         </tfoot>
       </table>
+
+      <HistoryChart history={results.history} myRole={view.myRole} />
 
       <div className="text-center">
         <Link to="/" className="font-medium text-amber-700 hover:underline">

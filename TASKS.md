@@ -178,8 +178,25 @@ in a working state. Estimates add up to ~8 h.
 
 ## Phase 6: Optional, only if time is left
 
-- [ ] Line chart of inventory/backlog/orders from `history` on the results screen
+- [x] Line chart of inventory/backlog/orders from `history` on the results screen
       (reveal all roles only when finished).
-- [ ] Bot that fills empty roles (e.g. orders `incomingOrder + (backlog − inventory)/2`,
+  - `results.history` (every role's `RoundRecord[]`) is part of the view only once the
+    game is finished, so information hiding is still enforced server-side.
+  - `HistoryChart.tsx`: hand-rolled SVG (no chart dependency), one line per role, own
+    line thicker; switch between orders (with customer demand dashed), inventory and
+    backlog; hovering a round shows every role's value in the legend. It measures its
+    container, so labels keep their size on a phone.
+- [x] Bot that fills empty roles (e.g. orders `incomingOrder + (backlog − inventory)/2`,
       clamped ≥ 0) and submits automatically each round.
-- [ ] One server integration test (real Fastify + ws client).
+  - `bot.ts`: `botOrder(record)`, rounded and clamped to 0..`MAX_ORDER`.
+  - `fillWithBots(state)` rule: seats `{ bot: true }` in free roles and starts the game;
+    rejected outside the lobby or without a person (`no_human_player`). Bots order in
+    the rules as each round starts, so no timers and nothing to lose on a restart.
+  - WS intent `fillWithBots`, accepted only from a socket bound to a role. Lobby button
+    "Fill N roles with bots"; the board and results mark bot roles (`view.bots`).
+- [x] One server integration test (real Fastify + ws client).
+  - `apps/server/src/app.test.ts` (`npm test`): the real app on a free port with Node's
+    built-in `WebSocket`. A full four-player game (754), bots + spectator permissions,
+    and a restart on the same DB file.
+- [x] Check: played a game in the browser as the Wholesaler against three bots to the
+      results chart (desktop and 390 px wide).

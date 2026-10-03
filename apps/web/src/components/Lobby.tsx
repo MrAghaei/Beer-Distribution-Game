@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Check, Copy, LoaderCircle, User } from 'lucide-react';
+import { Bot, Check, Copy, LoaderCircle, User } from 'lucide-react';
 import { ROLES, type PlayerView, type Role } from '@beer/game';
 import { joinGame } from '../lib/api';
 import { gameUrl } from '../lib/format';
@@ -8,14 +8,19 @@ import { ROLE_INFO } from '../lib/roles';
 
 type Props = {
   view: PlayerView;
+  lastError: string | null;
+  canFillWithBots: boolean;
   onJoined: (token: string) => void;
+  onFillWithBots: () => boolean;
 };
 
-export function Lobby({ view, onJoined }: Props) {
+export function Lobby({ view, lastError, canFillWithBots, onJoined, onFillWithBots }: Props) {
   const join = useMutation({
     mutationFn: (role: Role) => joinGame(view.code, role),
     onSuccess: ({ token }) => onJoined(token),
   });
+  // Stays set until the game starts and the lobby goes away, so a double click sends one request.
+  const [botsRequested, setBotsRequested] = useState(false);
 
   const missing = ROLES.filter((role) => !view.rolesTaken[role]).length;
   const joiningRole = join.isPending ? join.variables : null;
@@ -57,10 +62,27 @@ export function Lobby({ view, onJoined }: Props) {
 
         {join.error ? <p className="text-sm text-red-600">{join.error.message}</p> : null}
         {view.myRole ? (
-          <p className="text-sm text-slate-500">
-            Playing all four roles yourself? Open the link in three more tabs and take a role in each.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 p-4">
+            <p className="max-w-md text-sm text-slate-600">
+              Playing all four roles yourself? Open the link in three more tabs and take a role in each. Or let bots
+              play the free roles and start now.
+            </p>
+            <button
+              type="button"
+              onClick={() => setBotsRequested(onFillWithBots())}
+              disabled={!canFillWithBots || botsRequested}
+              className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50"
+            >
+              {botsRequested ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden />
+              ) : (
+                <Bot className="size-4" aria-hidden />
+              )}
+              Fill {missing} {missing === 1 ? 'role' : 'roles'} with bots
+            </button>
+          </div>
         ) : null}
+        {lastError ? <p className="text-sm text-red-600">{lastError}</p> : null}
       </section>
     </div>
   );
