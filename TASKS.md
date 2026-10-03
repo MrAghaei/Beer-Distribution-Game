@@ -90,26 +90,31 @@ in a working state. Estimates add up to ~8 h.
 
 ## Phase 3: Server (~1.5 h)
 
-- [ ] `db.ts`: open better-sqlite3 (`DB_PATH`, default `data/beer-game.db`, mkdir),
+- [x] `db.ts`: open better-sqlite3 (`DB_PATH`, default `data/beer-game.db`, mkdir),
       WAL, `CREATE TABLE IF NOT EXISTS games(code PK, state TEXT, updated_at INT)`;
       `loadGame(code)`, `saveGame(state)` (upsert).
-- [ ] `gameService.ts`: `Map` cache over the DB; `create()` (unique 6-char code,
+- [x] `gameService.ts`: `Map` cache over the DB; `create()` (unique 6-char code,
       unambiguous alphabet), `join(code, role)` → token (`crypto.randomUUID()`),
       `placeOrder(code, token, qty)`. Each method: get → pure fn → save → notify.
-- [ ] `hub.ts`: sockets per game `{ socket, role | null }`; `broadcast(code)` sends
+- [x] `hub.ts`: sockets per game `{ socket, role | null }`; `broadcast(state)` sends
       `toPlayerView` per socket; remove sockets on close.
-- [ ] `routes.ts`: `POST /api/games`, `POST /api/games/:code/join` (zod-validated;
+- [x] `routes.ts`: `POST /api/games`, `POST /api/games/:code/join` (zod-validated;
       404 / 409 / 400 mapped from rule errors).
-- [ ] `ws.ts`: `/ws`; parse every message with `ClientMessage.safeParse`; `hello`
+- [x] `ws.ts`: `/ws`; parse every message with `ClientMessage.safeParse`; `hello`
       resolves the token to a role (an unknown token means a spectator) and sends
       the current view; `placeOrder` requires a bound role; errors are sent only to
       that socket.
-- [ ] `index.ts`: Fastify app, register routes + ws. (Done early: in production it serves
+- [x] `index.ts`: Fastify app, register routes + ws. (Done early: in production it serves
       `apps/web/dist` with an SPA fallback to `index.html`; `PORT` env (default 3000).)
-- [ ] Scripts: `dev`: `tsx watch src/index.ts`; `build`: `tsup` (bundle `@beer/game`,
+  - Extra: the app is built in `app.ts` (`buildApp({ dbPath, webDist })`) so a test can
+    run it against `:memory:`; `index.ts` reads env, listens and closes cleanly on
+    SIGINT/SIGTERM (sockets closed, DB checkpointed).
+- [x] Scripts: `dev`: `tsx watch src/index.ts`; `build`: `tsup` (bundle `@beer/game`,
       keep `better-sqlite3` external); `start`: `node dist/index.js`.
-- [ ] Manual check with a WS client: restart the server mid-game and confirm the
-      state is still there.
+- [x] Manual check with a WS client: restart the server mid-game and confirm the
+      state is still there. (Scripted with Node's built-in `WebSocket`: 4 players play
+      to round 6, restart, the factory's view is identical, the game finishes at
+      394/120/120/120 = 754.)
 
 ## Phase 4: Web client (~2 h)
 
