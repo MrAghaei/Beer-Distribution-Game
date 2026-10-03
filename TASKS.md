@@ -104,6 +104,8 @@ in a working state. Estimates add up to ~8 h.
       resolves the token to a role (an unknown token means a spectator) and sends
       the current view; `placeOrder` requires a bound role; errors are sent only to
       that socket.
+  - Extra: ping/pong heartbeat every 30 s; a socket that misses a ping is terminated,
+    so connections that dropped without a close frame leave the hub.
 - [x] `index.ts`: Fastify app, register routes + ws. (Done early: in production it serves
       `apps/web/dist` with an SPA fallback to `index.html`; `PORT` env (default 3000).)
   - Extra: the app is built in `app.ts` (`buildApp({ dbPath, webDist })`) so a test can
@@ -118,46 +120,83 @@ in a working state. Estimates add up to ~8 h.
 
 ## Phase 4: Web client (~2 h)
 
-- [ ] Tailwind v4 via `@tailwindcss/vite`, `@import "tailwindcss"` in `index.css`.
-- [ ] Vite `server.proxy`: `/api` → `http://localhost:3000`, `/ws` → ws proxy.
-- [ ] `QueryClientProvider` + TanStack Router (code-based): `/` and `/game/$code`.
-- [ ] `lib/api.ts`: `createGame()`, `joinGame(code, role)` (parse responses with zod).
-- [ ] `lib/session.ts`: get/set token in `sessionStorage` under `beer:<code>`.
-- [ ] `hooks/useGameSocket.ts`: connect, send `hello`, keep `view` + `connected` +
+- [x] Tailwind v4 via `@tailwindcss/vite`, `@import "tailwindcss"` in `index.css`.
+- [x] Vite `server.proxy`: `/api` → `http://localhost:3000`, `/ws` → ws proxy.
+      (The target port follows `PORT`, so a second server can be tested on another port.)
+- [x] `QueryClientProvider` + TanStack Router (code-based): `/` and `/game/$code`.
+      (`router.tsx`; the `$code` param is upper-cased, so a hand-typed link works.)
+- [x] `lib/api.ts`: `createGame()`, `joinGame(code, role)` (parse responses with zod).
+- [x] `lib/session.ts`: get/set token in `sessionStorage` under `beer:<code>`.
+- [x] `hooks/useGameSocket.ts`: connect, send `hello`, keep `view` + `connected` +
       `lastError`, expose `placeOrder(qty)`, reconnect with backoff.
-- [ ] `routes/Home.tsx`: "Create game" button (mutation → navigate) and a
+  - Extra: the socket is keyed on the code only; the token is read via `useEffectEvent`,
+    so joining a role re-sends `hello` on the open socket instead of reconnecting.
+    Incoming messages are validated with `ServerMessageSchema`; `sendingOrder` locks the
+    form between sending an order and the server's answer.
+- [x] `routes/Home.tsx`: "Create game" button (mutation → navigate) and a
       join-by-code input.
-- [ ] `routes/Game.tsx`: switch on `view.status`.
-  - [ ] `Lobby.tsx`: code + copy-link button (lucide `Copy`), four role cards
+- [x] `routes/Game.tsx`: switch on `view.status`. (Also: invalid code, unknown game and
+      "connecting" screens; `key={code}` gives each game a fresh socket and token.)
+  - [x] `Lobby.tsx`: code + copy-link button (lucide `Copy`), four role cards
         (free → "Take" button, taken → `Check`/`User` icon, yours highlighted),
         "waiting for N players".
-  - [ ] `Board.tsx`: round `n/20`, stat tiles (inventory, backlog, shipment arrived,
+  - [x] `Board.tsx`: round `n/20`, stat tiles (inventory, backlog, shipment arrived,
         order arrived, shipped, last order, round cost, total cost), order form
         (integer input, disabled after submit), submission status per role
-        (`CheckCircle` / `Clock`).
-  - [ ] `Results.tsx`: table of cost per role + total, own role highlighted.
-- [ ] Connection banner (`WifiOff`) while reconnecting; show server errors inline.
-- [ ] Check: four tabs, create → join all four → play 20 rounds → results.
-      Reload a tab mid-game; restart the server mid-game.
+        (`CircleCheck` / `Clock`; lucide 1.x dropped the `CheckCircle` name).
+        The input is prefilled with last round's order and validated with
+        `OrderQuantitySchema` before sending. A spectator sees only who has ordered.
+  - [x] `Results.tsx`: table of cost per role + total, own role highlighted.
+- [x] Connection banner (`WifiOff`) while reconnecting; show server errors inline.
+- [x] Check: four tabs, create → join all four → play 20 rounds → results.
+      Reload a tab mid-game; restart the server mid-game. (Everyone ordered 4: round 8
+      matched the fixture, a reloaded tab came back as the same role with its order still
+      locked, the server was killed and restarted on the same DB at round 8 and every tab
+      reconnected, and the results showed 394/120/120/120 = 754. Also checked: lower-case
+      link, unknown code, invalid code, and a spectator on the finished game.)
 
 ## Phase 5: Wiring, build and README (~45 min)
 
-- [ ] `npm run build` builds web + server; `npm start` serves the whole app on one port.
-- [ ] Fresh clone check: `npm install && npm test && npm run build && npm start`.
-- [ ] Rewrite `README.md` (keep the task description short or link it):
-  - [ ] how to run (commands, ports, `DB_PATH`, Node 24, npm)
-  - [ ] how the pieces fit together (diagram of packages)
-  - [ ] how four clients stay in sync (intent → validate → persist → per-player
+- [x] `npm run build` builds web + server; `npm start` serves the whole app on one port.
+      (Checked on `PORT=3100`: `/`, a deep link, static assets and the API from one
+      process; unknown `/api/*` stays a JSON 404. A scripted game over WS against the
+      built server ended at 394/120/120/120 = 754.)
+- [x] Fresh clone check: `npm install && npm test && npm run build && npm start`.
+      (Copy of the tracked + untracked files in `/tmp`, clean `node_modules`. The
+      `allowScripts` entry named `esbuild@0.27.7` while the lockfile pins `0.27.2`,
+      so install warned; fixed. The default DB lands in `apps/server/data/`.)
+- [x] Rewrite `README.md` (task description reduced to a summary + link to the
+      original brief in the first commit):
+  - [x] how to run (commands, ports, `DB_PATH`, Node 24, npm)
+  - [x] how the pieces fit together (diagram of packages)
+  - [x] how four clients stay in sync (intent → validate → persist → per-player
         snapshot broadcast; single-threaded atomicity; reconnect + hello)
-  - [ ] how state is modelled (`GameState`, the in-transit queue, history)
-  - [ ] rule interpretations (round 20 still takes orders; queue pop-before-push)
-  - [ ] tradeoffs (PRD §9) and what I'd do next
-  - [ ] how an AI assistant was used
+  - [x] how state is modelled (`GameState`, the in-transit queue, history)
+  - [x] rule interpretations (round 20 still takes orders; queue pop-before-push)
+  - [x] tradeoffs (PRD §9) and what I'd do next
+  - [ ] how an AI assistant was used (drafted; needs the author's own account)
 
 ## Phase 6: Optional, only if time is left
 
-- [ ] Line chart of inventory/backlog/orders from `history` on the results screen
+- [x] Line chart of inventory/backlog/orders from `history` on the results screen
       (reveal all roles only when finished).
-- [ ] Bot that fills empty roles (e.g. orders `incomingOrder + (backlog − inventory)/2`,
+  - `results.history` (every role's `RoundRecord[]`) is part of the view only once the
+    game is finished, so information hiding is still enforced server-side.
+  - `HistoryChart.tsx`: hand-rolled SVG (no chart dependency), one line per role, own
+    line thicker; switch between orders (with customer demand dashed), inventory and
+    backlog; hovering a round shows every role's value in the legend. It measures its
+    container, so labels keep their size on a phone.
+- [x] Bot that fills empty roles (e.g. orders `incomingOrder + (backlog − inventory)/2`,
       clamped ≥ 0) and submits automatically each round.
-- [ ] One server integration test (real Fastify + ws client).
+  - `bot.ts`: `botOrder(record)`, rounded and clamped to 0..`MAX_ORDER`.
+  - `fillWithBots(state)` rule: seats `{ bot: true }` in free roles and starts the game;
+    rejected outside the lobby or without a person (`no_human_player`). Bots order in
+    the rules as each round starts, so no timers and nothing to lose on a restart.
+  - WS intent `fillWithBots`, accepted only from a socket bound to a role. Lobby button
+    "Fill N roles with bots"; the board and results mark bot roles (`view.bots`).
+- [x] One server integration test (real Fastify + ws client).
+  - `apps/server/src/app.test.ts` (`npm test`): the real app on a free port with Node's
+    built-in `WebSocket`. A full four-player game (754), bots + spectator permissions,
+    and a restart on the same DB file.
+- [x] Check: played a game in the browser as the Wholesaler against three bots to the
+      results chart (desktop and 390 px wide).

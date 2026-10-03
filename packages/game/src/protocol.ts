@@ -11,6 +11,17 @@ export const OrderQuantitySchema = z.number().int().min(0).max(MAX_ORDER);
 
 const perRole = <T extends z.ZodType>(value: T) => z.record(RoleSchema, value);
 
+export const RoundRecordSchema = z.object({
+  shipmentArrived: z.number(),
+  incomingOrder: z.number(),
+  shipped: z.number(),
+  inventory: z.number(),
+  backlog: z.number(),
+  roundCost: z.number(),
+  totalCost: z.number(),
+  orderPlaced: z.number().nullable(),
+});
+
 /** What one player is allowed to see. Built only by `toPlayerView`. */
 export const PlayerViewSchema = z.object({
   code: GameCodeSchema,
@@ -20,6 +31,8 @@ export const PlayerViewSchema = z.object({
   /** The role this connection plays, or null for someone who has not joined yet. */
   myRole: RoleSchema.nullable(),
   rolesTaken: perRole(z.boolean()),
+  /** Which taken roles are played by a bot. */
+  bots: perRole(z.boolean()),
   /** Who has ordered this round. Booleans only, never the amounts. */
   submitted: perRole(z.boolean()),
   /** Own numbers for the current round; null in the lobby or without a role. */
@@ -43,6 +56,8 @@ export const PlayerViewSchema = z.object({
     .object({
       costs: perRole(z.number()),
       total: z.number(),
+      /** Every role's round-by-round numbers, history[role][round - 1]. */
+      history: perRole(z.array(RoundRecordSchema)),
     })
     .nullable(),
 });
@@ -67,6 +82,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Subscribe to a game. Without a (valid) token the socket only watches the lobby. */
   z.object({ type: z.literal('hello'), code: GameCodeSchema, token: TokenSchema.optional() }),
   z.object({ type: z.literal('placeOrder'), quantity: OrderQuantitySchema }),
+  /** Seat bots in the free roles and start the game. Only a player who holds a role may ask. */
+  z.object({ type: z.literal('fillWithBots') }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 

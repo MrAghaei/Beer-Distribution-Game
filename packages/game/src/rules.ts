@@ -1,3 +1,4 @@
+import { botOrder } from './bot';
 import {
   BACKLOG_COST,
   customerDemand,
@@ -36,11 +37,23 @@ export function claimRole(current: GameState, role: Role, token: string): RuleRe
   const state = structuredClone(current);
   state.players[role] = { token };
 
-  if (ROLES.every((r) => state.players[r])) {
-    state.status = 'playing';
-    state.round = 1;
-    runRoundSteps(state);
+  if (ROLES.every((r) => state.players[r])) startPlaying(state);
+  return { ok: true, state };
+}
+
+/**
+ * Seats a bot in every free role and starts the game. Needs at least one person:
+ * with four bots nobody would ever play the rounds.
+ */
+export function fillWithBots(current: GameState): RuleResult {
+  if (current.status !== 'lobby') return { ok: false, error: 'game_not_in_lobby' };
+  if (ROLES.every((role) => !current.players[role] || isBot(current, role))) {
+    return { ok: false, error: 'no_human_player' };
   }
+
+  const state = structuredClone(current);
+  for (const role of ROLES) state.players[role] ??= { bot: true };
+  startPlaying(state);
   return { ok: true, state };
 }
 
@@ -62,7 +75,17 @@ export function placeOrder(current: GameState, role: Role, quantity: number): Ru
 }
 
 export function findRoleByToken(state: GameState, token: string): Role | null {
-  return ROLES.find((role) => state.players[role]?.token === token) ?? null;
+  return (
+    ROLES.find((role) => {
+      const player = state.players[role];
+      return player && 'token' in player && player.token === token;
+    }) ?? null
+  );
+}
+
+export function isBot(state: GameState, role: Role): boolean {
+  const player = state.players[role];
+  return player !== undefined && 'bot' in player;
 }
 
 function startingRoleState(): RoleState {
@@ -90,7 +113,25 @@ function finishRound(state: GameState): void {
     return;
   }
   state.round += 1;
+  startRound(state);
+}
+
+function startPlaying(state: GameState): void {
+  state.status = 'playing';
+  state.round = 1;
+  startRound(state);
+}
+
+/**
+ * Steps 1–4, then the bots order straight away. A bot's order depends only on its
+ * own numbers, so ordering first changes nothing; at least one person is always
+ * left to order, so this never completes a round by itself.
+ */
+function startRound(state: GameState): void {
   runRoundSteps(state);
+  for (const role of ROLES) {
+    if (isBot(state, role)) state.roles[role].pendingOrder = botOrder(state.roles[role].history.at(-1)!);
+  }
 }
 
 /** Steps 1–4 of the current round, for all roles at once. Mutates `state`. */

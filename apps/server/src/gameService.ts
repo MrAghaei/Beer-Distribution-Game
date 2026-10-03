@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import {
   claimRole,
   createGame,
+  fillWithBots,
   findRoleByToken,
   placeOrder,
   RULE_ERROR_MESSAGES,
@@ -66,6 +67,14 @@ export class GameService {
       const role = findRoleByToken(state, token);
       return role ? placeOrder(state, role, quantity) : { ok: false, error: 'unknown_player' };
     });
+    return result.ok ? { ok: true } : result;
+  }
+
+  /** Only a seated player may hand the free roles to bots, so a passer-by cannot start a game. */
+  fillWithBots(code: string, token: string): { ok: true } | Failure {
+    const result = this.apply(code, (state) =>
+      findRoleByToken(state, token) ? fillWithBots(state) : { ok: false, error: 'unknown_player' },
+    );
     return result.ok ? { ok: true } : result;
   }
 

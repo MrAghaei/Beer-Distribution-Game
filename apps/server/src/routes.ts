@@ -14,6 +14,7 @@ const HTTP_STATUS: Record<ServiceError, number> = {
   game_not_found: 404,
   role_taken: 409,
   game_not_in_lobby: 409,
+  no_human_player: 409,
   game_not_playing: 409,
   already_submitted: 409,
   invalid_quantity: 400,

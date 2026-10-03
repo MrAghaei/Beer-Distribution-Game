@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { RawData } from 'ws';
+import type { RawData, WebSocket } from 'ws';
 import { ClientMessageSchema, findRoleByToken, toPlayerView, type ClientMessage } from '@beer/game';
 import { SERVICE_ERROR_MESSAGES, type GameService } from './gameService';
 import { send, type Hub } from './hub';
@@ -7,9 +7,29 @@ import { send, type Hub } from './hub';
 /** The game one socket watches. `token` is only kept once it has been matched to a role. */
 type Session = { code: string; token: string | null };
 
+const HEARTBEAT_MS = 30_000;
+
 export const wsRoutes: FastifyPluginAsync<{ games: GameService; hub: Hub }> = async (app, { games, hub }) => {
+  // A connection that drops without a close frame (sleep, network loss) never emits
+  // 'close' by itself. Ping every socket; one that has not answered since the last
+  // ping is terminated, which emits 'close' and removes it from the hub.
+  const answered = new WeakSet<WebSocket>();
+  const heartbeat = setInterval(() => {
+    for (const socket of app.websocketServer.clients) {
+      if (!answered.has(socket)) {
+        socket.terminate();
+        continue;
+      }
+      answered.delete(socket);
+      socket.ping();
+    }
+  }, HEARTBEAT_MS);
+  app.addHook('onClose', async () => clearInterval(heartbeat));
+
   app.get('/ws', { websocket: true }, (socket, request) => {
     let session: Session | null = null;
+    answered.add(socket);
+    socket.on('pong', () => answered.add(socket));
 
     // Errors go only to the socket that caused them; state changes go to everyone via the hub.
     const fail = (message: string) => send(socket, { type: 'error', message });
@@ -34,6 +54,13 @@ export const wsRoutes: FastifyPluginAsync<{ games: GameService; hub: Hub }> = as
       if (!result.ok) fail(SERVICE_ERROR_MESSAGES[result.error]);
     };
 
+    const fillWithBots = () => {
+      if (!session?.token) return fail(SERVICE_ERROR_MESSAGES.unknown_player);
+
+      const result = games.fillWithBots(session.code, session.token);
+      if (!result.ok) fail(SERVICE_ERROR_MESSAGES[result.error]);
+    };
+
     socket.on('message', (raw) => {
       const parsed = parseMessage(raw);
       if (!parsed.ok) return fail(parsed.error);
@@ -44,6 +71,8 @@ export const wsRoutes: FastifyPluginAsync<{ games: GameService; hub: Hub }> = as
             return hello(parsed.message);
           case 'placeOrder':
             return order(parsed.message);
+          case 'fillWithBots':
+            return fillWithBots();
         }
       } catch (err) {
         // A throw inside a socket listener would take the whole process down.
