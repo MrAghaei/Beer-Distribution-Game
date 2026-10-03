@@ -48,19 +48,23 @@ export type RoleState = {
 
 export type GameStatus = 'lobby' | 'playing' | 'finished';
 
+/** A seat is held by a person, identified by a secret token, or by a bot. */
+export type Player = { token: string } | { bot: true };
+
 export type GameState = {
   code: string;
   status: GameStatus;
   /** 0 in the lobby, then 1..TOTAL_ROUNDS. */
   round: number;
-  /** Secret per-player tokens. Never sent to clients. */
-  players: Partial<Record<Role, { token: string }>>;
+  /** Who holds each role. Tokens are secret and never sent to clients. */
+  players: Partial<Record<Role, Player>>;
   roles: Record<Role, RoleState>;
 };
 
 export type RuleError =
   | 'game_not_in_lobby'
   | 'role_taken'
+  | 'no_human_player'
   | 'game_not_playing'
   | 'invalid_quantity'
   | 'already_submitted';
@@ -70,6 +74,7 @@ export type RuleResult = { ok: true; state: GameState } | { ok: false; error: Ru
 export const RULE_ERROR_MESSAGES: Record<RuleError, string> = {
   game_not_in_lobby: 'The game has already started.',
   role_taken: 'That role is already taken.',
+  no_human_player: 'Take a role yourself before filling the rest with bots.',
   game_not_playing: 'The game is not in progress.',
   invalid_quantity: `An order must be a whole number between 0 and ${MAX_ORDER}.`,
   already_submitted: 'You have already ordered this round.',
